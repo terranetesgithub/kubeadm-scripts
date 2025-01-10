@@ -3,7 +3,8 @@
 # Source: http://kubernetes.io/docs/getting-started-guides/kubeadm
 
 set -e
-
+echo
+echo -e "${GREEN}[INFO] Verify ubuntu release...${NC}"
 source /etc/lsb-release
 if [ "$DISTRIB_RELEASE" != "20.04" ]; then
     echo "################################# "
@@ -16,10 +17,14 @@ if [ "$DISTRIB_RELEASE" != "20.04" ]; then
     read
 fi
 
+echo
+
 KUBE_VERSION=1.31.1
 
 # get platform
 PLATFORM=`uname -p`
+
+echo -e "${GREEN}[INFO] Verify platform...${NC}"
 
 if [ "${PLATFORM}" == "aarch64" ]; then
   PLATFORM="arm64"
@@ -30,6 +35,10 @@ else
   echo "https://github.com/containerd/containerd/blob/main/docs/getting-started.md#option-1-from-the-official-binaries"
   exit 1
 fi
+
+echo
+
+echo -e "${GREEN}[INFO] Setup vimrc, bashrc, and terminal...${NC}"
 
 ### setup terminal
 apt-get --allow-unauthenticated update
@@ -45,10 +54,15 @@ echo 'complete -F __start_kubectl k' >> ~/.bashrc
 sed -i '1s/^/force_color_prompt=yes\n/' ~/.bashrc
 
 
+echo
+echo -e "${GREEN}[INFO] disable linux swap and remove any existing swap partitions...${NC}"
+
 ### disable linux swap and remove any existing swap partitions
 swapoff -a
 sed -i '/\sswap\s/ s/^\(.*\)$/#\1/g' /etc/fstab
 
+echo
+echo -e "${GREEN}[INFO] install docker, kubelet, kubeadm, kubectl, and kubernetes-cni...${NC}"
 
 ### remove packages
 kubeadm reset -f || true
@@ -58,7 +72,8 @@ apt-get remove -y docker.io containerd kubelet kubeadm kubectl kubernetes-cni ||
 apt-get autoremove -y
 systemctl daemon-reload
 
-
+echo
+echo -e "${GREEN}[INFO] install podman...${NC}"
 
 ### install podman
 . /etc/os-release
@@ -72,6 +87,8 @@ cat <<EOF | sudo tee /etc/containers/registries.conf
 registries = ['docker.io']
 EOF
 
+echo
+echo -e "${GREEN}[INFO] install packages...${NC}"
 
 ### install packages
 apt-get install -y apt-transport-https ca-certificates
@@ -87,6 +104,8 @@ apt-get --allow-unauthenticated update
 apt-get --allow-unauthenticated install -y docker.io containerd kubelet=${KUBE_VERSION}-1.1 kubeadm=${KUBE_VERSION}-1.1 kubectl=${KUBE_VERSION}-1.1 kubernetes-cni
 apt-mark hold kubelet kubeadm kubectl kubernetes-cni
 
+echo
+echo -e "${GREEN}[INFO] install containerd...${NC}"
 
 ### install containerd 1.6 over apt-installed-version
 wget https://github.com/containerd/containerd/releases/download/v1.6.12/containerd-1.6.12-linux-${PLATFORM}.tar.gz
@@ -97,6 +116,8 @@ rm -rf bin containerd-1.6.12-linux-${PLATFORM}.tar.gz
 systemctl unmask containerd
 systemctl start containerd
 
+echo
+echo -e "${GREEN}[INFO] configure containerd...${NC}"
 
 ### containerd
 cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
@@ -113,6 +134,7 @@ EOF
 sudo sysctl --system
 sudo mkdir -p /etc/containerd
 
+echo
 
 ### containerd config
 cat > /etc/containerd/config.toml <<EOF
@@ -151,6 +173,8 @@ version = 2
         SystemdCgroup = true
 EOF
 
+echo
+echo -e "${GREEN}[INFO] configure runtime-endpoint for crictl...${NC}"
 
 ### crictl uses containerd as default
 {
@@ -159,6 +183,8 @@ runtime-endpoint: unix:///run/containerd/containerd.sock
 EOF
 }
 
+echo
+echo -e "${GREEN}[INFO] kubelet should use containerd...${NC}"
 
 ### kubelet should use containerd
 {
@@ -167,7 +193,8 @@ KUBELET_EXTRA_ARGS="--container-runtime-endpoint unix:///run/containerd/containe
 EOF
 }
 
-
+echo
+echo -e "${GREEN}[INFO] start services...${NC}"
 
 ### start services
 systemctl daemon-reload
@@ -175,7 +202,8 @@ systemctl enable containerd
 systemctl restart containerd
 systemctl enable kubelet && systemctl start kubelet
 
-
+echo
+echo -e "${GREEN}[INFO] init k8s...${NC}"
 
 ### init k8s
 kubeadm reset -f
@@ -184,6 +212,6 @@ service kubelet start
 
 
 echo
-echo "EXECUTE ON MASTER: kubeadm token create --print-join-command --ttl 0"
-echo "THEN RUN THE OUTPUT AS COMMAND HERE TO ADD AS WORKER"
+echo -e "${GREEN}EXECUTE ON MASTER: kubeadm token create --print-join-command --ttl 0${NC}"
+echo -e "${GREEN}THEN RUN THE OUTPUT AS COMMAND HERE TO ADD AS WORKER${NC}"
 echo
