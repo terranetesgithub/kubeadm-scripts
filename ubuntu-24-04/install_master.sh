@@ -5,12 +5,12 @@
 set -e
 
 source /etc/lsb-release
-if [ "$DISTRIB_RELEASE" != "20.04" ]; then
+if [ "$DISTRIB_RELEASE" != "24.04" ]; then
     echo "################################# "
     echo "############ WARNING ############ "
     echo "################################# "
     echo
-    echo "This script only works on Ubuntu 20.04!"
+    echo "This script only works on Ubuntu 24.04!"
     echo "You're using: ${DISTRIB_DESCRIPTION}"
     echo "Better ABORT with Ctrl+C. Or press any key to continue the install"
     read

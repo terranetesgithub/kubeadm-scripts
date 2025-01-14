@@ -219,12 +219,14 @@ sudo cp -i /etc/kubernetes/admin.conf ~/.kube/config
 echo
 echo -e "${GREEN}[INFO] Install CNI...${NC}"
 ### CNI
+kubectl apply -f https://raw.githubusercontent.com/killer-sh/cks-course-environment/master/cluster-setup/calico.yaml
 
-## Download the Calico networking manifest for the Kubernetes API datastore
-#curl https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml -O
-echo
-echo -e "${GREEN}[INFO] Deploying Calico...${NC}"
-kubectl apply -f calico.yaml
+
+### Download the Calico networking manifest for the Kubernetes API datastore
+##curl https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml -O
+#echo
+#echo -e "${GREEN}[INFO] Deploying Calico...${NC}"
+#kubectl apply -f calico.yaml
 
 echo
 echo -e "${GREEN}[INFO] Install etcdctl...${NC}"
