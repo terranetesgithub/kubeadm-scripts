@@ -4,6 +4,11 @@
 
 set -e
 
+# Color codes
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}[INFO] Verify ubuntu release...${NC}"
 source /etc/lsb-release
 if [ "$DISTRIB_RELEASE" != "24.04" ]; then
     echo "################################# "
@@ -16,8 +21,14 @@ if [ "$DISTRIB_RELEASE" != "24.04" ]; then
     read
 fi
 
-KUBE_VERSION=1.31.1
+echo
+echo -e "${GREEN}[INFO] specify kubernetes version...${NC}"
+KUBE_VERSION=1.31.4
 
+echo
+
+
+echo -e "${GREEN}[INFO] get platform...${NC}"
 # get platform
 PLATFORM=`uname -p`
 
@@ -31,6 +42,9 @@ else
   exit 1
 fi
 
+echo
+
+echo -e "${GREEN}[INFO] setup vimrc, bashrc, and terminal...${NC}"
 ### setup terminal
 apt-get --allow-unauthenticated update
 apt-get --allow-unauthenticated install -y bash-completion binutils
@@ -44,61 +58,112 @@ echo 'alias c=clear' >> ~/.bashrc
 echo 'complete -F __start_kubectl k' >> ~/.bashrc
 sed -i '1s/^/force_color_prompt=yes\n/' ~/.bashrc
 
+echo
 
+echo -e "${GREEN}[INFO] disable linux swap and remove any existing swap partitions...${NC}"
 ### disable linux swap and remove any existing swap partitions
-swapoff -a
-sed -i '/\sswap\s/ s/^\(.*\)$/#\1/g' /etc/fstab
+sudo swapoff -a
+sudo sed -i '/\sswap\s/ s/^\(.*\)$/#\1/g' /etc/fstab
 
+# Load necessary kernel modules
+sudo modprobe overlay
+sudo modprobe br_netfilter
 
-### remove packages
-kubeadm reset -f || true
-crictl rm --force $(crictl ps -a -q) || true
-apt-mark unhold kubelet kubeadm kubectl kubernetes-cni || true
-apt-get remove -y docker.io containerd kubelet kubeadm kubectl kubernetes-cni || true
-apt-get autoremove -y
-systemctl daemon-reload
-
-
-
-### install podman
-. /etc/os-release
-echo "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_${VERSION_ID}/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:testing.list
-curl -L "http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_${VERSION_ID}/Release.key" | sudo apt-key add -
-apt-get update -qq
-apt-get -qq -y install podman cri-tools containers-common
-rm /etc/apt/sources.list.d/devel:kubic:libcontainers:testing.list
-cat <<EOF | sudo tee /etc/containers/registries.conf
-[registries.search]
-registries = ['docker.io']
+# Ensure modules are loaded on boot
+sudo tee /etc/modules-load.d/k8s.conf <<EOF
+overlay
+br_netfilter
 EOF
 
+# Set required sysctl parameters
+sudo tee /etc/sysctl.d/kubernetes.conf <<EOT
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOT
 
-### install packages
-apt-get install -y apt-transport-https ca-certificates
-mkdir -p /etc/apt/keyrings
-rm /etc/apt/keyrings/kubernetes-1-31-apt-keyring.gpg || true
-rm /etc/apt/keyrings/kubernetes-1-30-apt-keyring.gpg || true
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-1-31-apt-keyring.gpg
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-1-30-apt-keyring.gpg
-echo > /etc/apt/sources.list.d/kubernetes.list
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-1-31-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-1-30-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
-apt-get --allow-unauthenticated update
-apt-get --allow-unauthenticated install -y docker.io containerd kubelet=${KUBE_VERSION}-1.1 kubeadm=${KUBE_VERSION}-1.1 kubectl=${KUBE_VERSION}-1.1 kubernetes-cni
-apt-mark hold kubelet kubeadm kubectl kubernetes-cni
+# Apply sysctl parameters
+sudo sysctl --system
 
+echo
 
-### install containerd 1.6 over apt-installed-version
-wget https://github.com/containerd/containerd/releases/download/v1.6.12/containerd-1.6.12-linux-${PLATFORM}.tar.gz
-tar xvf containerd-1.6.12-linux-${PLATFORM}.tar.gz
-systemctl stop containerd
-mv bin/* /usr/bin
-rm -rf bin containerd-1.6.12-linux-${PLATFORM}.tar.gz
-systemctl unmask containerd
-systemctl start containerd
+echo -e "${GREEN}[INFO] remove packages on ubuntu 24.04...${NC}"
+### remove packages on ubuntu 24.04
+sudo kubeadm reset -f || true
+sudo crictl rm --force $(sudo crictl ps -a -q) || true
+sudo apt-mark unhold kubelet kubeadm kubectl kubernetes-cni || true
+sudo apt-get remove -y docker.io containerd kubelet kubeadm kubectl kubernetes-cni || true
+sudo apt-get autoremove -y
+sudo systemctl daemon-reload
 
+echo
 
+echo -e "${GREEN}[INFO] install podman on ubuntu 24.04...${NC}"
+### install podman on ubuntu 24.04
+sudo apt update
+sudo apt install podman -y
+sudo podman --version
+sudo systemctl start podman.socket
+sudo systemctl restart podman.socket
+sudo systemctl status podman.socket
+
+echo
+echo -e "${GREEN}[INFO] install kubelet, kubeadm, kubectl...${NC}"
+### install kubelet, kubeadm, kubectl
+### install packages in ubuntu 24.04
+
+echo
+# Install Containerd dependencies
+sudo apt update
+echo -e "${GREEN}[INFO] install containerd dependencies...${NC}"
+sudo apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates
+
+echo
+# Add Containerd repository
+echo -e "${GREEN}[INFO] add containerd repository...${NC}"
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmour -o /etc/apt/trusted.gpg.d/containerd.gpg
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+
+echo
+# Install Containerd
+echo -e "${GREEN}[INFO] install containerd...${NC}"
+sudo apt update && sudo apt install containerd.io -y
+
+echo
+# Configure Containerd
+echo -e "${GREEN}[INFO] configure containerd...${NC}"
+containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
+sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+sudo systemctl restart containerd
+
+echo
+# Add Kubernetes repository
+echo -e "${GREEN}[INFO] add kubernetes repository...${NC}"
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
+sudo tee /etc/apt/sources.list.d/k8s.list <<EOT
+deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+EOT
+
+echo
+
+# Install Kubernetes components
+echo -e "${GREEN}[INFO] install kubernetes components...${NC}"
+sudo apt update
+sudo apt install kubelet kubeadm kubectl -y
+sudo apt-mark hold kubelet kubeadm kubectl
+
+echo
+### installed versions
+echo -e "${GREEN}[INFO] installed versions...${NC}"
+kubeadm version
+kubectl version --client
+kubelet --version
+containerd --version
+
+echo
 ### containerd
+echo -e "${GREEN}[INFO] configure containerd...${NC}"
 cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
 overlay
 br_netfilter
@@ -113,63 +178,11 @@ EOF
 sudo sysctl --system
 sudo mkdir -p /etc/containerd
 
-
-### containerd config
-cat > /etc/containerd/config.toml <<EOF
-disabled_plugins = []
-imports = []
-oom_score = 0
-plugin_dir = ""
-required_plugins = []
-root = "/var/lib/containerd"
-state = "/run/containerd"
-version = 2
-
-[plugins]
-
-  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
-    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-      base_runtime_spec = ""
-      container_annotations = []
-      pod_annotations = []
-      privileged_without_host_devices = false
-      runtime_engine = ""
-      runtime_root = ""
-      runtime_type = "io.containerd.runc.v2"
-
-      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-        BinaryName = ""
-        CriuImagePath = ""
-        CriuPath = ""
-        CriuWorkPath = ""
-        IoGid = 0
-        IoUid = 0
-        NoNewKeyring = false
-        NoPivotRoot = false
-        Root = ""
-        ShimCgroup = ""
-        SystemdCgroup = true
-EOF
-
-
-### crictl uses containerd as default
-{
-cat <<EOF | sudo tee /etc/crictl.yaml
-runtime-endpoint: unix:///run/containerd/containerd.sock
-EOF
-}
-
-
-### kubelet should use containerd
-{
-cat <<EOF | sudo tee /etc/default/kubelet
-KUBELET_EXTRA_ARGS="--container-runtime-endpoint unix:///run/containerd/containerd.sock"
-EOF
-}
-
+echo
 
 
 ### start services
+echo -e "${GREEN}[INFO] start services...${NC}"
 systemctl daemon-reload
 systemctl enable containerd
 systemctl restart containerd
@@ -177,25 +190,30 @@ systemctl enable kubelet && systemctl start kubelet
 
 
 ### init k8s
+echo -e "${GREEN}[INFO] initialize kubernetes...${NC}"
 rm /root/.kube/config || true
-kubeadm init --kubernetes-version=${KUBE_VERSION} --ignore-preflight-errors=NumCPU --skip-token-print --pod-network-cidr 192.168.0.0/16
+kubeadm init --kubernetes-version=1.31.4 --ignore-preflight-errors=NumCPU --skip-token-print --pod-network-cidr 192.168.0.0/16
 
 mkdir -p ~/.kube
 sudo cp -i /etc/kubernetes/admin.conf ~/.kube/config
+sudo chown $(id -u):$(id -g) ~/.kube/config
+
 
 ### CNI
-kubectl apply -f https://raw.githubusercontent.com/killer-sh/cks-course-environment/master/cluster-setup/calico.yaml
+# Install Kubernetes Network Plugin (Calico)
+# https://github.com/projectcalico/calico/releases
+# https://kifarunix.com/install-and-setup-kubernetes-cluster-on-ubuntu-24-04/
+CNI_VER=3.28.0
+echo -e "${GREEN}[INFO] install calico network plugin...${NC}"
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v${CNI_VER}/manifests/tigera-operator.yaml
 
+wget https://raw.githubusercontent.com/projectcalico/calico/v${CNI_VER}/manifests/custom-resources.yaml
 
-# etcdctl
-ETCDCTL_VERSION=v3.5.1
-ETCDCTL_ARCH=$(dpkg --print-architecture)
-ETCDCTL_VERSION_FULL=etcd-${ETCDCTL_VERSION}-linux-${ETCDCTL_ARCH}
-wget https://github.com/etcd-io/etcd/releases/download/${ETCDCTL_VERSION}/${ETCDCTL_VERSION_FULL}.tar.gz
-tar xzf ${ETCDCTL_VERSION_FULL}.tar.gz ${ETCDCTL_VERSION_FULL}/etcdctl
-mv ${ETCDCTL_VERSION_FULL}/etcdctl /usr/bin/
-rm -rf ${ETCDCTL_VERSION_FULL} ${ETCDCTL_VERSION_FULL}.tar.gz
+kubectl create -f custom-resources.yaml
+
 
 echo
 echo "### COMMAND TO ADD A WORKER NODE ###"
+echo
+echo -e "${GREEN}[INFO] create join command...${NC}"
 kubeadm token create --print-join-command --ttl 0
