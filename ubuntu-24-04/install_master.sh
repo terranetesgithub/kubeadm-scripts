@@ -194,6 +194,15 @@ echo -e "${GREEN}[INFO] initialize kubernetes...${NC}"
 rm /root/.kube/config || true
 kubeadm init --kubernetes-version=1.31.4 --control-plane-endpoint=master-node --ignore-preflight-errors=NumCPU --skip-token-print --pod-network-cidr 192.168.0.0/16
 
+#  --apiserver-advertise-address=192.168.79.2 \
+
+#kubeadm init \
+#  --kubernetes-version=1.31.4 \
+#  --control-plane-endpoint=master-node \
+#  --ignore-preflight-errors=NumCPU \
+#  --skip-token-print \
+#  --pod-network-cidr 192.168.0.0/16
+
 mkdir -p ~/.kube
 sudo cp -i /etc/kubernetes/admin.conf ~/.kube/config
 sudo chown $(id -u):$(id -g) ~/.kube/config
