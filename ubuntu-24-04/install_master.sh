@@ -192,14 +192,20 @@ systemctl enable kubelet && systemctl start kubelet
 ### init k8s
 echo -e "${GREEN}[INFO] initialize kubernetes...${NC}"
 rm /root/.kube/config || true
-kubeadm init --kubernetes-version=1.31.4 --control-plane-endpoint=master-node --ignore-preflight-errors=NumCPU --skip-token-print --pod-network-cidr 192.168.0.0/16
+# 192.168.81.2 is the IP address of the master node
+echo -e "${GREEN}[INFO] 192.168.81.2 is the IP address of the master node...${NC}"
 
-#kubeadm init \
-#  --kubernetes-version=1.31.4 \
-#  --control-plane-endpoint=master-node \
-#  --ignore-preflight-errors=NumCPU \
-#  --skip-token-print \
-#  --pod-network-cidr 192.168.0.0/16
+sudo kubeadm init \
+  --kubernetes-version=v1.30.10 \
+  --control-plane-endpoint=master-node \
+  --ignore-preflight-errors=NumCPU \
+  --skip-token-print \
+  --upload-certs \
+  --pod-network-cidr=192.168.0.0/16 \
+  --apiserver-advertise-address=192.168.81.2 \
+  --apiserver-cert-extra-sans=192.168.81.2 \
+  --apiserver-cert-extra-sans=master-node \
+  --cri-socket=unix:///run/containerd/containerd.sock
 
 mkdir -p ~/.kube
 sudo cp -i /etc/kubernetes/admin.conf ~/.kube/config
