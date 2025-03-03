@@ -23,7 +23,7 @@ fi
 
 echo
 echo -e "${GREEN}[INFO] specify kubernetes version...${NC}"
-KUBE_VERSION=1.31.4
+KUBE_VERSION=1.32.0
 
 echo
 
@@ -140,9 +140,9 @@ echo
 # Add Kubernetes repository
 echo -e "${GREEN}[INFO] add kubernetes repository...${NC}"
 sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBE_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
 sudo tee /etc/apt/sources.list.d/k8s.list <<EOT
-deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBE_VERSION}/deb/ /
 EOT
 
 echo
@@ -150,7 +150,7 @@ echo
 # Install Kubernetes components
 echo -e "${GREEN}[INFO] install kubernetes components...${NC}"
 sudo apt update
-sudo apt install kubelet kubeadm kubectl -y
+sudo apt install -y kubelet=${KUBE_VERSION}-00 kubeadm=${KUBE_VERSION}-00 kubectl=${KUBE_VERSION}-00
 sudo apt-mark hold kubelet kubeadm kubectl
 
 echo
