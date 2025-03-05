@@ -23,7 +23,9 @@ fi
 
 echo
 echo -e "${GREEN}[INFO] specify kubernetes version...${NC}"
-KUBE_VERSION=1.30
+KUBERNETES_VERSION="v1.32"
+CRIO_VERSION="v1.32"
+KUBERNETES_INSTALL_VERSION="1.32.0-1.1"
 
 echo
 
@@ -39,15 +41,15 @@ elif [ "${PLATFORM}" == "x86_64" ]; then
 else
   echo "${PLATFORM} has to be either amd64 or arm64/aarch64. Check containerd supported binaries page"
   echo "https://github.com/containerd/containerd/blob/main/docs/getting-started.md#option-1-from-the-official-binaries"
-  exit 1
+#  exit 1
 fi
 
 echo
 
 echo -e "${GREEN}[INFO] setup vimrc, bashrc, and terminal...${NC}"
 ### setup terminal
-apt-get --allow-unauthenticated update
-apt-get --allow-unauthenticated install -y bash-completion binutils
+sudo apt-get --allow-unauthenticated update
+sudo apt-get --allow-unauthenticated install -y bash-completion binutils
 echo 'colorscheme ron' >> ~/.vimrc
 echo 'set tabstop=2' >> ~/.vimrc
 echo 'set shiftwidth=2' >> ~/.vimrc
@@ -60,98 +62,89 @@ sed -i '1s/^/force_color_prompt=yes\n/' ~/.bashrc
 
 echo
 
-echo -e "${GREEN}[INFO] disable linux swap and remove any existing swap partitions...${NC}"
-### disable linux swap and remove any existing swap partitions
-sudo swapoff -a
-sudo sed -i '/\sswap\s/ s/^\(.*\)$/#\1/g' /etc/fstab
 
-# Load necessary kernel modules
-sudo modprobe overlay
-sudo modprobe br_netfilter
+#!/bin/bash
 
-# Ensure modules are loaded on boot
-sudo tee /etc/modules-load.d/k8s.conf <<EOF
-overlay
-br_netfilter
-EOF
+# Kubernetes Variable Declaration
+KUBERNETES_VERSION="v1.32"
+CRIO_VERSION="v1.32"
+KUBERNETES_INSTALL_VERSION="1.32.0-1.1"
 
-# Set required sysctl parameters
-sudo tee /etc/sysctl.d/kubernetes.conf <<EOT
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
-net.ipv4.ip_forward = 1
-EOT
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# Apply sysctl parameters
+# Apply sysctl params without reboot
+echo -e "${YELLOW}[INFO] Applying sysctl parameters without reboot...${NC}"
 sudo sysctl --system
 
-echo
 
-echo -e "${GREEN}[INFO] remove packages on ubuntu 24.04...${NC}"
-### remove packages on ubuntu 24.04
-sudo kubeadm reset -f || true
-sudo crictl rm --force $(sudo crictl ps -a -q) || true
-sudo apt-mark unhold kubelet kubeadm kubectl kubernetes-cni || true
-sudo apt-get remove -y docker.io containerd kubelet kubeadm kubectl kubernetes-cni || true
-sudo apt-get autoremove -y
-sudo systemctl daemon-reload
+############################################################################################################
+# Install kubeadm, kubelet, and kubectl
+############################################################################################################
 
-echo
+# Install kubelet, kubectl, and kubeadm
+echo -e "${YELLOW}[INFO] Installing kubelet, kubectl, and kubeadm...${NC}"
+curl -fsSL https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/Release.key | \
+    gpg --dearmor | sudo tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
 
-echo -e "${GREEN}[INFO] install podman on ubuntu 24.04...${NC}"
-### install podman on ubuntu 24.04
-sudo apt update
-sudo apt install podman -y
-sudo podman --version
-sudo systemctl start podman.socket
-sudo systemctl restart podman.socket
-sudo systemctl status podman.socket
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/ /" | \
+    sudo tee /etc/apt/sources.list.d/kubernetes.list
 
-echo
-echo -e "${GREEN}[INFO] install kubelet, kubeadm, kubectl...${NC}"
-### install kubelet, kubeadm, kubectl
-### install packages in ubuntu 24.04
+sudo apt-get update -y
 
-echo
-# Install Containerd dependencies
-sudo apt update
-echo -e "${GREEN}[INFO] install containerd dependencies...${NC}"
-sudo apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates
+# Handle held Kubernetes packages
+echo -e "${YELLOW}[INFO] Removing package hold on kubelet, kubectl, and kubeadm...${NC}"
+sudo apt-mark unhold kubelet kubectl kubeadm
 
-echo
-# Add Containerd repository
-echo -e "${GREEN}[INFO] add containerd repository...${NC}"
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmour -o /etc/apt/trusted.gpg.d/containerd.gpg
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+sudo apt-get install -y --allow-change-held-packages kubelet="$KUBERNETES_INSTALL_VERSION" \
+    kubectl="$KUBERNETES_INSTALL_VERSION" kubeadm="$KUBERNETES_INSTALL_VERSION"
 
-echo
-# Install Containerd
-echo -e "${GREEN}[INFO] install containerd...${NC}"
-sudo apt update && sudo apt install containerd.io -y
+# Reapply package hold
+sudo apt-mark hold kubelet kubectl kubeadm
 
-echo
-# Configure Containerd
-echo -e "${GREEN}[INFO] configure containerd...${NC}"
-containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
-sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
-sudo systemctl restart containerd
+# Verify installation and versions
+echo -e "${YELLOW}[INFO] Verifying installation of kubeadm, kubectl, and kubelet...${NC}"
+if command -v kubeadm &> /dev/null; then
+    echo -e "${GREEN}[SUCCESS] kubeadm version: $(kubeadm version -o short)${NC}"
+else
+    echo -e "${RED}[ERROR] kubeadm is not installed successfully.${NC}"
+fi
 
-echo
-# Add Kubernetes repository
-echo -e "${GREEN}[INFO] add kubernetes repository...${NC}"
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
-sudo tee /etc/apt/sources.list.d/k8s.list <<EOT
-deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
-EOT
+if command -v kubectl &> /dev/null; then
+    echo -e "${GREEN}[SUCCESS] kubectl version: $(kubectl version --client --short)${NC}"
+else
+    echo -e "${RED}[ERROR] kubectl is not installed successfully.${NC}"
+fi
 
-echo
+if command -v kubelet &> /dev/null; then
+    echo -e "${GREEN}[SUCCESS] kubelet version: $(kubelet --version)${NC}"
+else
+    echo -e "${RED}[ERROR] kubelet is not installed successfully.${NC}"
+fi
 
-# Install Kubernetes components
-echo -e "${GREEN}[INFO] install kubernetes components...${NC}"
-sudo apt update
-sudo apt install kubelet kubeadm kubectl -y
-sudo apt-mark hold kubelet kubeadm kubectl
+sudo apt-get update -y
+
+# Install jq, a command-line JSON processor
+sudo apt-get install -y jq
+
+# Retrieve the local IP address dynamically
+local_ip="$(ip --json addr show | jq -r '.[] | select(.ifname != null) | .addr_info[] | select(.family == "inet") | .local' | head -n 1)"
+
+# Verify if a valid IP address was retrieved
+if [ -z "$local_ip" ]; then
+  echo -e "${RED}[ERROR] Unable to retrieve the local IP address. Please ensure a valid network interface is active.${NC}"
+else
+  # Write the local IP address to the kubelet default configuration file with sufficient permissions
+  sudo tee /etc/default/kubelet > /dev/null << EOF
+KUBELET_EXTRA_ARGS=--node-ip=$local_ip
+EOF
+  echo -e "${GREEN}[SUCCESS] Kubelet configured successfully with IP: $local_ip${NC}"
+fi
+
+
 
 echo
 ### installed versions
@@ -183,17 +176,10 @@ echo
 
 ### start services
 echo -e "${GREEN}[INFO] start services...${NC}"
-systemctl daemon-reload
-systemctl enable containerd
-systemctl restart containerd
-systemctl enable kubelet && systemctl start kubelet
-
-
-
-### init k8s
-kubeadm reset -f
-systemctl daemon-reload
-service kubelet start
+sudo systemctl daemon-reload
+sudo systemctl enable containerd
+sudo systemctl restart containerd
+sudo systemctl enable kubelet && systemctl start kubelet
 
 
 echo
