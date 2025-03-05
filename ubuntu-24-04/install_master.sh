@@ -131,21 +131,6 @@ sudo apt-get update -y
 # Install jq, a command-line JSON processor
 sudo apt-get install -y jq
 
-# Retrieve the local IP address dynamically
-local_ip="$(ip --json addr show | jq -r '.[] | select(.ifname != null) | .addr_info[] | select(.family == "inet") | .local' | head -n 1)"
-
-# Verify if a valid IP address was retrieved
-if [ -z "$local_ip" ]; then
-  echo -e "${RED}[ERROR] Unable to retrieve the local IP address. Please ensure a valid network interface is active.${NC}"
-else
-  # Write the local IP address to the kubelet default configuration file with sufficient permissions
-  sudo tee /etc/default/kubelet > /dev/null << EOF
-KUBELET_EXTRA_ARGS=--node-ip=$local_ip
-EOF
-  echo -e "${GREEN}[SUCCESS] Kubelet configured successfully with IP: $local_ip${NC}"
-fi
-
-
 
 echo
 ### installed versions
@@ -186,24 +171,7 @@ sudo systemctl enable kubelet && systemctl start kubelet
 ### init k8s
 echo -e "${GREEN}[INFO] initialize kubernetes...${NC}"
 sudo rm /root/.kube/config || true
-# 192.168.81.2 is the IP address of the master node
-echo -e "${GREEN}[INFO] 192.168.81.2 is the IP address of the master node...${NC}"
 
-#sudo kubeadm init \
-#  --kubernetes-version=v1.30.10 \
-#  --control-plane-endpoint=master-node \
-#  --ignore-preflight-errors=NumCPU \
-#  --skip-token-print \
-#  --upload-certs \
-#  --pod-network-cidr=192.168.0.0/16 \
-#  --apiserver-advertise-address=192.168.81.2 \
-#  --apiserver-cert-extra-sans=192.168.81.2 \
-#  --apiserver-cert-extra-sans=master-node \
-#  --cri-socket=unix:///run/containerd/containerd.sock
-#
-#mkdir -p ~/.kube
-#sudo cp -i /etc/kubernetes/admin.conf ~/.kube/config
-#sudo chown $(id -u):$(id -g) ~/.kube/config
 
 #!/bin/bash
 
@@ -262,13 +230,17 @@ fi
 # Install Kubernetes Network Plugin (Calico)
 # https://github.com/projectcalico/calico/releases
 # https://kifarunix.com/install-and-setup-kubernetes-cluster-on-ubuntu-24-04/
-CNI_VER=3.28.0
-echo -e "${GREEN}[INFO] install calico network plugin...${NC}"
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v${CNI_VER}/manifests/tigera-operator.yaml
+#CNI_VER=3.28.0
+#echo -e "${GREEN}[INFO] install calico network plugin...${NC}"
+#kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v${CNI_VER}/manifests/tigera-operator.yaml
+#
+#wget https://raw.githubusercontent.com/projectcalico/calico/v${CNI_VER}/manifests/custom-resources.yaml
+#
+#kubectl create -f custom-resources.yaml
 
-wget https://raw.githubusercontent.com/projectcalico/calico/v${CNI_VER}/manifests/custom-resources.yaml
+sudo kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
 
-kubectl create -f custom-resources.yaml
+sleep 10
 
 
 echo

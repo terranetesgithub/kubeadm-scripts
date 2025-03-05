@@ -130,21 +130,6 @@ sudo apt-get update -y
 # Install jq, a command-line JSON processor
 sudo apt-get install -y jq
 
-# Retrieve the local IP address dynamically
-local_ip="$(ip --json addr show | jq -r '.[] | select(.ifname != null) | .addr_info[] | select(.family == "inet") | .local' | head -n 1)"
-
-# Verify if a valid IP address was retrieved
-if [ -z "$local_ip" ]; then
-  echo -e "${RED}[ERROR] Unable to retrieve the local IP address. Please ensure a valid network interface is active.${NC}"
-else
-  # Write the local IP address to the kubelet default configuration file with sufficient permissions
-  sudo tee /etc/default/kubelet > /dev/null << EOF
-KUBELET_EXTRA_ARGS=--node-ip=$local_ip
-EOF
-  echo -e "${GREEN}[SUCCESS] Kubelet configured successfully with IP: $local_ip${NC}"
-fi
-
-
 
 echo
 ### installed versions
