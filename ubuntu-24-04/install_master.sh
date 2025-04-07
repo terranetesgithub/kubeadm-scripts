@@ -63,9 +63,6 @@ sed -i '1s/^/force_color_prompt=yes\n/' ~/.bashrc
 
 echo
 
-
-#!/bin/bash
-
 # Kubernetes Variable Declaration
 KUBERNETES_VERSION="v1.32"
 CRIO_VERSION="v1.32"
